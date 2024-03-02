@@ -59,6 +59,12 @@ Every time you want to add new tables to watch in real-time
       "table.include.list": "public.student,public.room,public.<your new table here>"
   }
  ```
+Update your Debezium:
+
+```sh
+curl -i -X PUT -H "Accept:application/json" -H "Content-Type:application/json" 127.0.0.1:8083/connectors/exampledb-connector/config --data "@debezium-update.json"
+```
+
    and subscribe your new topic in the consumer in index.js:
    ```sh
     await consumer.subscribe({ topic: 'postgres.public.student' })
