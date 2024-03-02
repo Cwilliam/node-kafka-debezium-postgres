@@ -1,0 +1,71 @@
+version: "3.8"
+services:
+
+  postgres:
+    image: debezium/postgres:13 #the preferred version: debezium/postgres:<version>; but if you want to use the default postgres image (image: postgres), you need to run this command in postgres: `ALTER SYSTEM SET wal_level = logical;` and then restart the container
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=docker
+      - POSTGRES_PASSWORD=docker
+      - POSTGRES_DB=exampledb
+
+  # ZooKeeper is a centralized service for maintaining configuration information and naming among distributed services. 
+  # Kafka utilizes ZooKeeper to synchronize configurations across different clusters.
+  zookeeper:
+    image: confluentinc/cp-zookeeper:5.5.3
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  # Kafka is a distributed event streaming platform that is used for building real-time data pipelines and streaming applications.
+  kafka:
+    image: confluentinc/cp-enterprise-kafka:5.5.3
+    hostname: localhost
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_BROKER_ID: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9991
+    ports:
+      - 9092:9092
+
+  # Debezium is a distributed platform that turns your existing databases into event streams,
+  # so applications can quickly react to each row-level change in the databases.
+  debezium:
+    image: debezium/connect:1.4
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+    depends_on: [kafka]
+    ports:
+      - 8083:8083
+
+  # Schema Registry provides a centralized repository for managing and validating schemas for topic message data, and for serialization and deserialization of the data over the network.
+  # Producers and consumers to Kafka topics can use schemas to ensure data consistency and compatibility as schemas evolve.
+  schema-registry:
+    image: confluentinc/cp-schema-registry:5.5.3
+    environment:
+      - SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL=zookeeper:2181
+      - SCHEMA_REGISTRY_HOST_NAME=schema-registry
+      - SCHEMA_REGISTRY_LISTENERS=http://schema-registry:8081,http://localhost:8081
+    ports:
+      - 8081:8081
+    depends_on: [zookeeper, kafka]
+
+  # Node-kafka-consumer is a simple node.js application that consumes messages from Kafka topics.
+  node-kafka-consumer:
+    build:
+      dockerfile: ./Dockerfile
+      context: ./
+    image: node-kafka
+    ports:
+      - 3000:3000
+    depends_on: [debezium, kafka]
